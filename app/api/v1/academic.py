@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from flask.views import MethodView
-from flask_smorest import Blueprint, abort
+from flask_smorest import Blueprint
 
+from app.api.serve import serve
 from app.auth.middleware import require_api_key, tenant_limit
-from app.core.engine import EngineError, research_intent
 from app.extensions import limiter
 from app.schemas import EnvelopeSchema, PapersQueryArgs
 
@@ -21,9 +21,4 @@ class Papers(MethodView):
     @blp.response(200, EnvelopeSchema)
     def get(self, args):
         """Papers matching a query (arXiv)."""
-        try:
-            return research_intent(
-                "academic.papers", {"query": args["query"], "limit": args["limit"]}
-            )
-        except EngineError as exc:
-            abort(exc.status_code, message=exc.message, errors=exc.extra.get("errors"))
+        return serve("academic.papers", {"query": args["query"], "limit": args["limit"]})

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from marshmallow import Schema, fields
+from marshmallow.validate import Length
 
 
 class SourceSchema(Schema):
@@ -10,11 +11,16 @@ class SourceSchema(Schema):
     url = fields.Str(allow_none=True)
     retrieved_at = fields.Str()
     license = fields.Str(allow_none=True)
+    attribution = fields.Str(metadata={"description": "ready-to-render attribution line"})
 
 
 class CacheInfoSchema(Schema):
     hit = fields.Bool()
     age_s = fields.Int(allow_none=True)
+
+
+class MetaSchema(Schema):
+    version = fields.Str(metadata={"description": "response-contract version"})
 
 
 class EnvelopeSchema(Schema):
@@ -26,7 +32,11 @@ class EnvelopeSchema(Schema):
     sources = fields.List(fields.Nested(SourceSchema))
     degraded = fields.Bool()
     warnings = fields.List(fields.Str())
+    attribution_required = fields.Bool(
+        metadata={"description": "true if any source license requires attribution"}
+    )
     cache = fields.Nested(CacheInfoSchema)
+    meta = fields.Nested(MetaSchema)
 
 
 class ResearchRequestSchema(Schema):
@@ -34,6 +44,19 @@ class ResearchRequestSchema(Schema):
     params = fields.Dict(
         required=True, metadata={"description": "identifier params, e.g. {'name': 'Apple Inc'}"}
     )
+
+
+class BatchRequestSchema(Schema):
+    requests = fields.List(
+        fields.Nested(ResearchRequestSchema),
+        required=True,
+        validate=Length(min=1, max=20, error="requests must contain between 1 and 20 items"),
+        metadata={"description": "1–20 research requests; results are returned in the same order"},
+    )
+
+
+class BatchResponseSchema(Schema):
+    results = fields.List(fields.Nested(EnvelopeSchema))
 
 
 class VulnQueryArgs(Schema):
@@ -73,13 +96,20 @@ class HealthSchema(Schema):
     version = fields.Str()
 
 
+class VersionSchema(Schema):
+    version = fields.Str(metadata={"description": "response-contract version"})
+    api = fields.Str(metadata={"description": "URL version prefix, e.g. v1"})
+
+
 class SourceHealthSchema(Schema):
     name = fields.Str()
     reputation = fields.Float()
     intents = fields.List(fields.Str())
     breaker_open = fields.Bool()
+    disabled = fields.Bool(metadata={"description": "disabled in this deployment"})
 
 
 class ReadySchema(Schema):
     status = fields.Str()
     connectors = fields.List(fields.Nested(SourceHealthSchema))
+    disabled_sources = fields.List(fields.Str())

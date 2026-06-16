@@ -20,7 +20,12 @@ project that serves both the API and a dev console.
 - **Stateless** — no database, no Redis. Auth is a static API key via env; logs go to stdout.
 - **Composable** — a `compose.slide_outline` intent orchestrates several sources into a slide-ready
   payload; per-intent normalizers shape merged data.
+- **Orchestrator-friendly** — `POST /v1/research/batch` (≤20, order-preserving, failure-isolated),
+  ready-to-render `attribution` per source + `attribution_required`, deterministic `ETag`/`meta.version`,
+  and a machine-detectable `source_disabled` signal.
 - **Dev console** — a zero-build static UI to drive the engine, deployed alongside the API.
+
+See [docs/API_SPEC.md](docs/API_SPEC.md) for the full integration contract.
 
 ## How it works
 
@@ -69,9 +74,10 @@ Every endpoint except `/v1/health` and `/v1/ready` requires an `X-API-Key` (when
 
 | Method | Path | Intent |
 |---|---|---|
-| GET  | `/v1/health` · `/v1/ready` | liveness · per-source breaker health |
+| GET  | `/v1/health` · `/v1/ready` · `/v1/version` | liveness · source health + disablement · contract version |
 | GET  | `/v1/intents` | list intents + serving sources |
 | POST | `/v1/research` | any intent — body `{"intent": "...", "params": {...}}` |
+| POST | `/v1/research/batch` | up to 20 intents in one call — `{"requests":[…]}`, results in order |
 | GET  | `/v1/concepts/{term}/(overview|definition|examples)` | `concept.*` |
 | GET  | `/v1/security/vulnerabilities?product=` · `/v1/security/techniques?query=` | `security.*` |
 | GET  | `/v1/academic/papers?query=` | `academic.papers` |

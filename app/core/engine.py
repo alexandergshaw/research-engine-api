@@ -11,14 +11,16 @@ from typing import Any
 from flask import g, has_request_context
 
 from app.connectors.base import Connector, ConnectorResult
+from app.version import RESPONSE_VERSION
 
 from .aggregator import aggregate
+from .attribution import any_required
 from .cache import get_fresh, get_stale, store
 from .context import build_context
 from .envelope import build_envelope
 from .http import NotFoundUpstream
 from .intents import get_intent, is_known, validate_params
-from .router import route
+from .router import candidates_for, route
 from .util import cache_key
 
 
@@ -70,6 +72,13 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
     ctx = build_context()
     connectors = route(intent, params, ctx)
     if not connectors:
+        disabled = [n for n in candidates_for(intent) if n in ctx.disabled_connectors]
+        if disabled:
+            raise NoSourcesAvailable(
+                f"intent '{intent}' is unavailable: source(s) disabled in this deployment",
+                code="source_disabled",
+                disabled_sources=sorted(disabled),
+            )
         raise NoSourcesAvailable(f"no source can serve intent '{intent}'")
 
     results, failures = _fanout(connectors, intent, params, ctx)
@@ -132,7 +141,9 @@ def _run_composite(intent: str, params: dict[str, Any], key: str) -> dict[str, A
         "sources": sources,
         "degraded": bool(warnings),
         "warnings": warnings,
+        "attribution_required": any_required(sources),
         "cache": {"hit": False, "age_s": None},
+        "meta": {"version": RESPONSE_VERSION},
     }
     store(key, envelope)
     return envelope

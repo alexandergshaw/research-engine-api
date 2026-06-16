@@ -1,12 +1,12 @@
-"""Granular company endpoints — the 'stats on a specific company' use case."""
+"""Granular company endpoints."""
 
 from __future__ import annotations
 
 from flask.views import MethodView
-from flask_smorest import Blueprint, abort
+from flask_smorest import Blueprint
 
+from app.api.serve import serve
 from app.auth.middleware import require_api_key, tenant_limit
-from app.core.engine import EngineError, research_intent
 from app.extensions import limiter
 from app.schemas import EnvelopeSchema
 
@@ -19,8 +19,5 @@ class CompanyProfile(MethodView):
 
     @blp.response(200, EnvelopeSchema)
     def get(self, name):
-        """Company profile (SEC EDGAR + Wikidata): industry, HQ, founding, financial facts."""
-        try:
-            return research_intent("company.profile", {"name": name})
-        except EngineError as exc:
-            abort(exc.status_code, message=exc.message, errors=exc.extra.get("errors"))
+        """Company profile (SEC EDGAR + Wikidata facts): industry, HQ, founding, financials."""
+        return serve("company.profile", {"name": name})

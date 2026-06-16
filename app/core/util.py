@@ -19,3 +19,15 @@ def cache_key(intent: str, params: dict[str, Any]) -> str:
     """Stable cache key from an intent + params (order-independent)."""
     blob = json.dumps({"intent": intent, "params": params}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def response_etag(intent: str, params: dict[str, Any], version: str) -> str:
+    """Strong-form ETag over intent + normalized params + contract version.
+
+    Deterministic for identical inputs so gateways/clients cache uniformly; a
+    version bump changes every ETag.
+    """
+    blob = json.dumps(
+        {"intent": intent, "params": params, "version": version}, sort_keys=True, default=str
+    )
+    return '"' + hashlib.sha256(blob.encode("utf-8")).hexdigest() + '"'
