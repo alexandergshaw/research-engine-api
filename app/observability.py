@@ -52,7 +52,6 @@ def configure_logging(app: Flask) -> None:
             return response
         start = g.get("request_start")
         duration_ms = round((time.perf_counter() - start) * 1000, 1) if start else None
-        tenant = g.get("tenant", None)
         audit = g.get("audit", {}) or {}
         log.info(
             "request",
@@ -61,7 +60,6 @@ def configure_logging(app: Flask) -> None:
             path=request.path,
             status=response.status_code,
             duration_ms=duration_ms,
-            tenant=getattr(tenant, "name", None),
             intent=audit.get("intent"),
             sources=audit.get("sources"),
             cache_hit=audit.get("cache_hit"),

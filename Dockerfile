@@ -5,12 +5,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir ".[prod]"
+# Runtime deps (cached layer) + a WSGI server for self-hosting.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY . .
 
 EXPOSE 8000
 
-# gunicorn for Linux prod; threads since work is I/O-bound (parallel source fan-out).
+# Threads since work is I/O-bound (parallel source fan-out). The app package is
+# importable from WORKDIR, so no install step is needed.
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "8", "wsgi:app"]

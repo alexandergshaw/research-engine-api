@@ -1,0 +1,16 @@
+{
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb", "includeFiles": "app/**" }
+    },
+    { "src": "console/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/v1/(.*)", "dest": "api/index.py" },
+    { "src": "/(docs|openapi.json)", "dest": "api/index.py" },
+    { "src": "/", "dest": "console/index.html" },
+    { "src": "/(.*)", "dest": "console/$1" }
+  ]
+}

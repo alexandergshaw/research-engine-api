@@ -2,7 +2,6 @@ import pytest
 
 from app import create_app
 from app.config import TestConfig
-from app.extensions import db
 
 
 def pytest_addoption(parser):
@@ -27,10 +26,7 @@ def pytest_collection_modifyitems(config, items):
 def app():
     application = create_app(TestConfig)
     with application.app_context():
-        db.create_all()
         yield application
-        db.session.remove()
-        db.drop_all()
 
 
 @pytest.fixture
@@ -39,14 +35,6 @@ def client(app):
 
 
 @pytest.fixture
-def auth(app):
-    """Seed a tenant + API key; return the auth header for authenticated requests."""
-    from app.auth.models import ApiKey, Tenant
-
-    tenant = Tenant(name="test-tenant")
-    db.session.add(tenant)
-    db.session.flush()
-    key, raw = ApiKey.generate(tenant, label="test")
-    db.session.add(key)
-    db.session.commit()
-    return {"X-API-Key": raw}
+def auth():
+    """Auth header matching TestConfig.API_KEYS."""
+    return {"X-API-Key": "test-key"}

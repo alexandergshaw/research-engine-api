@@ -1,4 +1,4 @@
-"""Environment-driven configuration."""
+"""Environment-driven configuration. Stateless — no database, no external stores."""
 
 from __future__ import annotations
 
@@ -11,6 +11,14 @@ def _float(name: str, default: float) -> float:
 
 def _int(name: str, default: int) -> int:
     return int(os.getenv(name, default))
+
+
+def _csv_set(name: str) -> frozenset[str]:
+    return frozenset(p.strip() for p in os.getenv(name, "").split(",") if p.strip())
+
+
+def _csv_list(name: str) -> list[str]:
+    return [p.strip() for p in os.getenv(name, "").split(",") if p.strip()]
 
 
 class Config:
@@ -42,19 +50,20 @@ class Config:
         },
     }
 
-    # --- Persistence ---
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///research_engine.db")
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # --- Auth (stateless) ---
+    # Comma-separated accepted API keys. Empty => open mode (no auth required).
+    API_KEYS = _csv_set("API_KEYS")
 
-    # --- Cache ---
-    _redis = os.getenv("REDIS_URL")
-    CACHE_TYPE = "RedisCache" if _redis else "SimpleCache"
-    CACHE_REDIS_URL = _redis
+    # --- CORS (optional; only needed for cross-origin dev) ---
+    CORS_ORIGINS = _csv_list("CORS_ORIGINS")
+
+    # --- Cache (in-memory only; ephemeral, not a datastore) ---
+    CACHE_TYPE = "SimpleCache"
     CACHE_DEFAULT_TIMEOUT = _int("CACHE_DEFAULT_TIMEOUT", 300)
     STALE_CACHE_TIMEOUT = _int("STALE_CACHE_TIMEOUT", 7 * 24 * 3600)
 
-    # --- Rate limiting (Flask-Limiter) ---
-    RATELIMIT_STORAGE_URI = _redis or "memory://"
+    # --- Rate limiting (Flask-Limiter; in-memory, best-effort) ---
+    RATELIMIT_STORAGE_URI = "memory://"
     RATELIMIT_DEFAULT = os.getenv("RATELIMIT_DEFAULT", "120/minute")
     RATELIMIT_HEADERS_ENABLED = True
 
@@ -67,23 +76,23 @@ class Config:
     BREAKER_RESET_TIMEOUT = _int("BREAKER_RESET_TIMEOUT", 60)
     USER_AGENT = os.getenv("USER_AGENT", "research-engine-api/0.1 (+you@example.com)")
 
+    # Connectors to skip (e.g. bulk-dataset sources unfit for serverless cold starts).
+    DISABLED_CONNECTORS = _csv_set("DISABLED_CONNECTORS")
+
     # --- Source credentials (optional) ---
     SOURCE_CREDS = {
         "stackexchange_key": os.getenv("STACKEXCHANGE_KEY"),
         "github_token": os.getenv("GITHUB_TOKEN"),
         "nvd_api_key": os.getenv("NVD_API_KEY"),
         "semantic_scholar_key": os.getenv("SEMANTIC_SCHOLAR_KEY"),
-        "onet_username": os.getenv("ONET_USERNAME"),
-        "onet_password": os.getenv("ONET_PASSWORD"),
     }
 
 
 class TestConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
-    CACHE_TYPE = "SimpleCache"
-    CACHE_REDIS_URL = None
-    RATELIMIT_STORAGE_URI = "memory://"
+    API_KEYS = frozenset({"test-key"})
+    CORS_ORIGINS: list[str] = []
+    DISABLED_CONNECTORS = frozenset()
     RATELIMIT_ENABLED = False
     HTTP_TIMEOUT = 2.0
     FANOUT_DEADLINE = 4.0

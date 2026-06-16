@@ -16,6 +16,8 @@ from .context import EngineContext
 def route(intent: str, params: dict[str, Any], ctx: EngineContext) -> list[Connector]:
     scored: list[tuple[float, Connector]] = []
     for connector in all_connectors():
+        if connector.name in ctx.disabled_connectors:
+            continue
         score = connector.supports(intent, params)
         if score <= 0:
             continue

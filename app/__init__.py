@@ -1,4 +1,4 @@
-"""Application factory for the Research Engine API."""
+"""Application factory for the Research Engine API (stateless — no database)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask
 
 from .config import Config
-from .extensions import cache, db, limiter, migrate, rest_api
+from .extensions import cache, limiter, rest_api
 
 
 def create_app(config_object: type = Config) -> Flask:
@@ -14,12 +14,20 @@ def create_app(config_object: type = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_object)
 
-    # Core extensions.
-    db.init_app(app)
-    migrate.init_app(app, db)
+    # Core extensions (all in-memory; no persistence).
     cache.init_app(app)
     limiter.init_app(app)
     rest_api.init_app(app)
+
+    # Optional CORS for cross-origin dev (no-op for the same-origin Vercel deploy).
+    if app.config.get("CORS_ORIGINS"):
+        from flask_cors import CORS
+
+        CORS(
+            app,
+            resources={r"/v1/*": {"origins": app.config["CORS_ORIGINS"]}},
+            allow_headers=["Content-Type", "X-API-Key"],
+        )
 
     # Shared resilient outbound HTTP client (thread-safe; reused across requests).
     from .core.http import HttpClient
@@ -40,7 +48,7 @@ def create_app(config_object: type = Config) -> Flask:
 
     configure_logging(app)
 
-    # Auth models + CLI (registered if present).
+    # Auth (env-key) + CLI.
     from .auth import register_auth
 
     register_auth(app)

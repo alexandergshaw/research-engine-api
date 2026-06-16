@@ -22,6 +22,7 @@ class EngineContext:
     timeout: float = 8.0
     deadline: float = 12.0
     max_connectors: int = 4
+    disabled_connectors: frozenset[str] = frozenset()
 
 
 def build_context() -> EngineContext:
@@ -32,4 +33,5 @@ def build_context() -> EngineContext:
         timeout=cfg["HTTP_TIMEOUT"],
         deadline=cfg["FANOUT_DEADLINE"],
         max_connectors=cfg["MAX_CONNECTORS_PER_INTENT"],
+        disabled_connectors=frozenset(cfg.get("DISABLED_CONNECTORS", frozenset())),
     )

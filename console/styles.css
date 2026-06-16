@@ -1,0 +1,16 @@
+/* Minimal extras on top of Tailwind (loaded via CDN). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -31,3 +31,9 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Vercel
+.vercel
+
+# Claude Code local tooling
+.claude/

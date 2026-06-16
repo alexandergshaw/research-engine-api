@@ -1,4 +1,4 @@
-"""Auth + multi-tenancy: models, key validation, usage logging, admin CLI."""
+"""Auth: stateless env-key validation (middleware) + key-generation CLI."""
 
 from __future__ import annotations
 
@@ -6,10 +6,8 @@ from flask import Flask
 
 
 def register_auth(app: Flask) -> None:
-    """Wire auth models, request hooks (timer + usage log), and the CLI onto the app."""
-    from . import models  # noqa: F401 — import so Flask-Migrate/create_all discover tables
+    """Register the key-generation CLI. Auth itself is enforced per-endpoint by
+    the `require_api_key` decorator (see middleware)."""
     from .cli import register_cli
-    from .middleware import log_usage
 
-    app.after_request(log_usage)
     register_cli(app)
