@@ -1,0 +1,41 @@
+# Production-shaped local stack: gunicorn app + Postgres + Redis.
+#   docker compose up --build
+# The api service runs migrations on start, then serves via gunicorn.
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/research_engine
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-me-in-production
+      USER_AGENT: "research-engine-api/0.1 (+you@example.com)"
+      RATELIMIT_DEFAULT: "120/minute"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "flask --app wsgi db upgrade &&
+             gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 8 wsgi:app"
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: research_engine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+
+volumes:
+  pgdata:
