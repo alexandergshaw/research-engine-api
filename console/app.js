@@ -30,23 +30,62 @@ function headers(json) {
 }
 
 async function apiGet(path) {
-  const r = await fetch(base() + path, { headers: headers(false) });
-  return r;
+  return fetch(base() + path, { headers: headers(false) });
 }
 async function apiPost(path, body) {
-  const r = await fetch(base() + path, {
+  return fetch(base() + path, {
     method: "POST",
     headers: headers(true),
     body: JSON.stringify(body),
   });
-  return r;
 }
 
 function setStatus(text, ok) {
   const el = $("status");
   el.textContent = text;
   el.className =
-    "text-xs self-center " + (ok === true ? "text-emerald-400" : ok === false ? "text-rose-400" : "text-slate-400");
+    "text-xs " + (ok === true ? "text-emerald-400" : ok === false ? "text-rose-400" : "text-slate-400");
+}
+
+// ---- run an intent (shared by search + advanced) --------------------------
+async function execute(intent, params) {
+  setStatus("searching…");
+  const t0 = performance.now();
+  let r;
+  try {
+    r = await apiPost("/v1/research", { intent, params });
+  } catch (e) {
+    renderError("Request failed (network/CORS): " + e.message);
+    setStatus("error", false);
+    return;
+  }
+  const ms = Math.round(performance.now() - t0);
+  let body;
+  try {
+    body = await r.json();
+  } catch {
+    renderError("HTTP " + r.status + " (non-JSON response)");
+    setStatus("error", false);
+    return;
+  }
+  if (r.status === 401) {
+    renderError("401 — set a valid API key under ⚙ Settings.");
+    setStatus("401 — needs API key", false);
+    return;
+  }
+  if (!r.ok) {
+    renderError("HTTP " + r.status + " — " + (body.message || body.detail || JSON.stringify(body)));
+    setStatus("HTTP " + r.status, false);
+    return;
+  }
+  setStatus("ok · " + ms + " ms", true);
+  renderEnvelope(body);
+}
+
+function searchConcept() {
+  const term = $("q").value.trim();
+  if (!term) return;
+  execute("concept.overview", { term });
 }
 
 // ---- quick picks ----------------------------------------------------------
@@ -74,15 +113,14 @@ function renderQuickPicks() {
   }
 }
 
-// ---- intents --------------------------------------------------------------
+// ---- intents (advanced) ---------------------------------------------------
 let INTENTS = [];
 
 async function loadIntents() {
-  setStatus("connecting…");
   try {
     const r = await apiGet("/v1/intents");
     if (r.status === 401) {
-      setStatus("401 — set a valid API key", false);
+      setStatus("ready — add API key in ⚙ Settings to search", false);
       return;
     }
     if (!r.ok) {
@@ -92,8 +130,8 @@ async function loadIntents() {
     INTENTS = await r.json();
     renderIntents();
     setStatus("connected · " + INTENTS.length + " intents", true);
-  } catch (e) {
-    setStatus("unreachable — check base URL/CORS", false);
+  } catch {
+    setStatus("unreachable — check ⚙ Settings", false);
   }
 }
 
@@ -131,12 +169,10 @@ function selectIntent(spec, values) {
     wrap.appendChild(input);
     box.appendChild(wrap);
   }
-  // auto-run when invoked from a quick pick (values provided)
-  if (values) run();
+  if (values) runAdvanced();
 }
 
-// ---- run + render ---------------------------------------------------------
-async function run() {
+function runAdvanced() {
   const intent = $("intent").value.trim();
   if (!intent) return;
   const params = {};
@@ -144,34 +180,10 @@ async function run() {
     const v = inp.value.trim();
     if (v) params[inp.dataset.field] = v;
   }
-  setStatus("running " + intent + "…");
-  const t0 = performance.now();
-  let r;
-  try {
-    r = await apiPost("/v1/research", { intent, params });
-  } catch (e) {
-    renderError("Request failed (network/CORS): " + e.message);
-    setStatus("error", false);
-    return;
-  }
-  const ms = Math.round(performance.now() - t0);
-  let body;
-  try {
-    body = await r.json();
-  } catch {
-    renderError("HTTP " + r.status + " (non-JSON response)");
-    setStatus("error", false);
-    return;
-  }
-  if (!r.ok) {
-    renderError("HTTP " + r.status + " — " + (body.message || JSON.stringify(body)));
-    setStatus("HTTP " + r.status, false);
-    return;
-  }
-  setStatus("ok · " + ms + " ms", true);
-  renderEnvelope(body);
+  execute(intent, params);
 }
 
+// ---- render ---------------------------------------------------------------
 function el(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -180,9 +192,10 @@ function el(tag, cls, html) {
 }
 
 function renderError(msg) {
-  const box = $("response");
-  box.innerHTML = "";
-  box.appendChild(el("div", "rounded-lg border border-rose-800 bg-rose-950/40 text-rose-200 p-3 text-sm", msg));
+  $("response").innerHTML = "";
+  $("response").appendChild(
+    el("div", "rounded-lg border border-rose-800 bg-rose-950/40 text-rose-200 p-3 text-sm", msg)
+  );
 }
 
 function esc(s) {
@@ -193,15 +206,26 @@ function renderEnvelope(env) {
   const box = $("response");
   box.innerHTML = "";
 
+  const empty = !env.data || Object.keys(env.data).length === 0;
+  if (empty) {
+    box.appendChild(
+      el(
+        "div",
+        "rounded-lg border border-slate-700 bg-slate-900/40 text-slate-300 p-3 text-sm",
+        `No data found for “${esc(env.query && (env.query.term || env.query.topic || env.query.query) || "")}”. ` +
+          `Try the full name or a different spelling.`
+      )
+    );
+  }
+
   if (env.degraded || (env.warnings && env.warnings.length)) {
     const w = el("div", "rounded-lg border border-amber-800 bg-amber-950/40 text-amber-200 p-3 text-sm");
     w.innerHTML =
-      `<div class="font-semibold">${env.degraded ? "Degraded result" : "Notice"}</div>` +
+      `<div class="font-semibold">${env.degraded ? "Partial result" : "Notice"}</div>` +
       (env.warnings || []).map((x) => `<div class="text-xs mt-0.5">• ${esc(x)}</div>`).join("");
     box.appendChild(w);
   }
 
-  // sources + cache
   const meta = el("div", "rounded-lg border border-slate-800 bg-slate-900/40 p-3");
   const cache = env.cache || {};
   meta.appendChild(
@@ -209,7 +233,8 @@ function renderEnvelope(env) {
       "div",
       "text-xs text-slate-400 mb-2",
       `intent <span class="font-mono text-indigo-300">${esc(env.intent)}</span> · ` +
-        `cache ${cache.hit ? "hit (" + (cache.age_s ?? "?") + "s)" : "miss"}`
+        `cache ${cache.hit ? "hit (" + (cache.age_s ?? "?") + "s)" : "miss"}` +
+        (env.attribution_required ? ` · <span class="text-amber-400">attribution required</span>` : "")
     )
   );
   const sl = el("div", "flex flex-wrap gap-2");
@@ -218,6 +243,7 @@ function renderEnvelope(env) {
     chip.href = s.url || "#";
     chip.target = "_blank";
     chip.rel = "noopener";
+    chip.title = s.attribution || "";
     chip.innerHTML = `<span class="text-indigo-300">${esc(s.name)}</span> <span class="text-slate-500">${esc(s.license || "")}</span>`;
     sl.appendChild(chip);
   }
@@ -225,19 +251,19 @@ function renderEnvelope(env) {
   meta.appendChild(sl);
   box.appendChild(meta);
 
-  // slide preview for the composite intent
   if (env.intent === "compose.slide_outline" && env.data && Array.isArray(env.data.slides)) {
     box.appendChild(renderSlides(env.data.slides));
   }
 
-  // raw JSON
-  const pre = el("pre", "rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-xs overflow-auto");
-  pre.textContent = JSON.stringify(env.data, null, 2);
-  const wrap = el("details", "rounded-lg");
-  wrap.open = true;
-  wrap.appendChild(el("summary", "text-xs text-slate-400 cursor-pointer mb-2", "data"));
-  wrap.appendChild(pre);
-  box.appendChild(wrap);
+  if (!empty) {
+    const pre = el("pre", "rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-xs overflow-auto");
+    pre.textContent = JSON.stringify(env.data, null, 2);
+    const wrap = el("details", "rounded-lg");
+    wrap.open = true;
+    wrap.appendChild(el("summary", "text-xs text-slate-400 cursor-pointer mb-2", "data"));
+    wrap.appendChild(pre);
+    box.appendChild(wrap);
+  }
 }
 
 function renderSlides(slides) {
@@ -261,14 +287,19 @@ function renderSlides(slides) {
 }
 
 // ---- wire up --------------------------------------------------------------
+$("searchBtn").onclick = searchConcept;
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchConcept();
+});
 $("testBtn").onclick = () => {
   saveCfg({ baseUrl: $("baseUrl").value.trim(), apiKey: $("apiKey").value.trim() });
   loadIntents();
 };
-$("runBtn").onclick = run;
+$("runBtn").onclick = runAdvanced;
 $("intent").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") run();
+  if (e.key === "Enter") runAdvanced();
 });
 
 renderQuickPicks();
 loadIntents();
+$("q").focus();
