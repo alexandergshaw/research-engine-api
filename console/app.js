@@ -150,6 +150,23 @@ function renderIntents() {
   }
 }
 
+// Example placeholders per known param field.
+const FIELD_HINTS = {
+  term: "e.g. TLS handshake",
+  topic: "e.g. RSA encryption",
+  query: "e.g. transformer attention",
+  name: "company name, e.g. Microsoft",
+  ticker: "ticker, e.g. MSFT",
+  title: "job title, e.g. data scientist",
+  product: "product/keyword, e.g. openssl",
+  keyword: "e.g. buffer overflow",
+  technique: "ATT&CK id or name, e.g. phishing",
+  tactic: "e.g. initial-access",
+  language: "tag, e.g. python",
+  tag: "tag, e.g. asyncio",
+  limit: "max results, e.g. 5",
+};
+
 function selectIntent(spec, values) {
   $("intent").value = spec.name;
   $("intentDesc").textContent = spec.description || "";
@@ -160,11 +177,14 @@ function selectIntent(spec, values) {
   for (const f of fields.length ? fields : ["term"]) {
     const wrap = document.createElement("label");
     wrap.className = "text-xs text-slate-400";
-    const req = accepts.has(f) ? ' <span class="text-rose-400">*</span>' : "";
+    const req = accepts.has(f)
+      ? ' <span class="text-rose-400">*</span>'
+      : ' <span class="text-slate-600">(optional)</span>';
     wrap.innerHTML = `${f}${req}`;
     const input = document.createElement("input");
     input.className = "mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm";
     input.dataset.field = f;
+    input.placeholder = FIELD_HINTS[f] || `e.g. a value for ${f}`;
     if (values && values[f] != null) input.value = values[f];
     wrap.appendChild(input);
     box.appendChild(wrap);
