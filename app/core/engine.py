@@ -10,7 +10,7 @@ from typing import Any
 
 from flask import g, has_request_context
 
-from app.connectors.base import Connector, ConnectorResult
+from app.connectors.base import Connector, ConnectorBadRequest, ConnectorResult
 from app.version import RESPONSE_VERSION
 
 from .aggregator import aggregate
@@ -21,7 +21,7 @@ from .envelope import build_envelope
 from .http import NotFoundUpstream
 from .intents import bucket_for, get_intent, is_known, validate_params
 from .router import candidates_for, route
-from .util import cache_key
+from .util import cache_key, redact_params
 
 
 class EngineError(Exception):
@@ -59,6 +59,7 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
         raise InvalidParams("; ".join(errors), errors=errors)
 
     key = cache_key(intent, params, bucket_for(intent))
+    query_view = redact_params(params)  # never echo/store caller-supplied secrets
 
     fresh = get_fresh(key)
     if fresh is not None:
@@ -67,7 +68,7 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
 
     spec = get_intent(intent)
     if spec is not None and spec.composite:
-        return _audit(_run_composite(intent, params, key))
+        return _audit(_run_composite(intent, params, query_view, key))
 
     ctx = build_context()
     connectors = route(intent, params, ctx)
@@ -81,9 +82,11 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
             )
         raise NoSourcesAvailable(f"no source can serve intent '{intent}'")
 
-    results, failures = _fanout(connectors, intent, params, ctx)
+    results, failures, rejects = _fanout(connectors, intent, params, ctx)
 
     if not results:
+        if rejects:  # client-side error (bad spec / blocked URL) — not retryable
+            raise InvalidParams("; ".join(rejects), errors=rejects)
         if failures:
             stale = get_stale(key)
             if stale is not None:
@@ -106,7 +109,7 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
         return _audit(
             build_envelope(
                 intent=intent,
-                query=params,
+                query=query_view,
                 data={},
                 sources=[],
                 warnings=["no data found for query"],
@@ -115,10 +118,11 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
 
     data, sources = aggregate(intent, results)
     warnings = [f"source '{name}' failed: {msg}" for name, msg in failures]
+    warnings += [f"source rejected: {msg}" for msg in rejects]
     warnings += [w for r in results for w in r.warnings]
     envelope = build_envelope(
         intent=intent,
-        query=params,
+        query=query_view,
         data=data,
         sources=sources,
         degraded=bool(failures),
@@ -128,7 +132,9 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
     return _audit(envelope)
 
 
-def _run_composite(intent: str, params: dict[str, Any], key: str) -> dict[str, Any]:
+def _run_composite(
+    intent: str, params: dict[str, Any], query_view: dict[str, Any], key: str
+) -> dict[str, Any]:
     from .compose import get_composer
 
     composer = get_composer(intent)
@@ -137,7 +143,7 @@ def _run_composite(intent: str, params: dict[str, Any], key: str) -> dict[str, A
     data, sources, warnings = composer(params, research_intent)
     envelope = {
         "intent": intent,
-        "query": params,
+        "query": query_view,
         "data": data,
         "sources": sources,
         "degraded": bool(warnings),
@@ -167,10 +173,11 @@ def _fanout(
     intent: str,
     params: dict[str, Any],
     ctx,
-) -> tuple[list[ConnectorResult], list[tuple[str, str]]]:
+) -> tuple[list[ConnectorResult], list[tuple[str, str]], list[str]]:
     order = {c.name: i for i, c in enumerate(connectors)}
     results: list[ConnectorResult] = []
     failures: list[tuple[str, str]] = []
+    rejects: list[str] = []  # client-side rejections (bad spec / blocked URL)
 
     with cf.ThreadPoolExecutor(max_workers=max(1, len(connectors))) as pool:
         future_map = {
@@ -184,12 +191,14 @@ def _fanout(
                 results.append(payload)
             elif kind == "err":
                 failures.append((connector.name, payload))
+            elif kind == "reject":
+                rejects.append(payload)
         for future in not_done:
             future.cancel()
             failures.append((future_map[future].name, "deadline exceeded"))
 
     results.sort(key=lambda r: order.get(r.connector, len(order)))
-    return results, failures
+    return results, failures, rejects
 
 
 def _safe_fetch(connector: Connector, intent, params, ctx) -> tuple[str, Any]:
@@ -198,6 +207,8 @@ def _safe_fetch(connector: Connector, intent, params, ctx) -> tuple[str, Any]:
         result = connector.fetch(intent, params, ctx)
     except NotFoundUpstream:
         return ("nodata", None)
+    except ConnectorBadRequest as exc:
+        return ("reject", str(exc))
     except Exception as exc:  # noqa: BLE001 — isolate any source failure
         return ("err", f"{type(exc).__name__}: {exc}")
     if not result.data:

@@ -155,6 +155,7 @@ contract-version bump rotates every ETag. The batch endpoint is a POST aggregati
 | GET | `/v1/companies/{name}/profile` | `company.profile` | path `name` (name or ticker) |
 | GET | `/v1/roles/{title}/responsibilities` | `role.responsibilities` | path `title` |
 | GET | `/v1/compose/slide-outline` | `compose.slide_outline` | query `topic` (req) |
+| POST | `/v1/jobs/postings` | `feed.poll` | body `{"source",…}` — caller-supplied source (see §8) |
 
 > Granular `concepts.*` wrappers pass only the path `term`. To pass `limit`/`language`/`tag`, use
 > `POST /v1/research`.
@@ -330,6 +331,73 @@ Notes:
 - If `gdelt` is disabled in the deployment, `company.news` returns the structured `501`
   `source_disabled` with `disabled_sources: ["gdelt"]` (see §5).
 
+### `feed.poll` — sources: http_source (caller-supplied)  ·  **time-varying (not reproducible)**
+An **incremental stream over a source you provide.** Instead of a built-in upstream, the caller
+describes its *own* HTTP JSON source — where to fetch and how to read it — and the engine fetches it,
+projects each record into a flat shape, and returns only the records **newer than the caller's
+cursor**. You own the poll cadence: call once, or poll continuously by passing each response's
+`data.cursor` back as `cursor`. The engine stays stateless — the cursor travels with you. Canonical
+use case: job postings.
+
+Params (body of `POST /v1/jobs/postings`, or `params` of `POST /v1/research`):
+
+```jsonc
+{
+  "source": {
+    "url": "https://boards.example.com/api/jobs",  // required, https (see SSRF note below)
+    "method": "GET",                                 // GET (default) or POST
+    "query":   { "team": "eng" },                    // optional querystring
+    "headers": { "Authorization": "Bearer …" },      // optional; your source's auth — MASKED in the echoed query
+    "body":    { "...": "..." },                     // optional JSON body (POST only)
+    "items_path": "data.jobs",                       // dotted path to the records array (default: response root)
+    "map": {                                         // target field <- dotted source path
+      "id": "id", "title": "title", "company": "company.name",
+      "location": "location.name", "url": "absolute_url",
+      "posted_at": "updated_at", "tags": "keywords"
+    },
+    "cursor_field": "posted_at",                     // which MAPPED field is the high-water mark
+    "cursor_type": "datetime",                       // datetime | epoch | number | string
+    "license": "© Example Boards"                    // optional; sets sources[].attribution
+  },
+  "since":  "2026-06-17T08:00:00Z",                  // OR a raw high-water value to poll past
+  "cursor": "<opaque token from a prior poll>",      // OR an opaque cursor (takes precedence over `since`)
+  "limit":  50                                       // 1–200, default 50
+}
+```
+
+```jsonc
+"data": {
+  "source": "boards.example.com",     // resolved host
+  "as_of":  "2026-06-17",             // UTC date the poll ran
+  "postings": [                       // newest-first by cursor_field; keys follow your `map`
+    { "id": "a1b2c3d4e5f6a7b8", "title": "Senior Engineer", "company": "Acme",
+      "location": "Remote", "url": "https://…", "posted_at": "2026-06-17T09:42:00Z",
+      "tags": ["python","backend"] }
+  ],
+  "cursor": "eyJ2IjoiMjAyNi0wNi0xN1Q…",  // opaque high-water cursor; pass back as `cursor` next poll
+  "count": 1,
+  "has_more": false                   // upstream had more than `limit` new items this poll
+}
+```
+Notes:
+- **Incremental & stateless.** With a `cursor_field` set, only records strictly newer than `since`/
+  `cursor` are returned, and `data.cursor` is the new high-water mark. With nothing new, `postings`
+  is `[]`, `data.cursor` **echoes** the supplied cursor (so you can keep polling), and `warnings`
+  contains `"no new items since cursor"`. Omit `cursor_field` for a full (non-incremental) fetch each
+  poll (`data.cursor` is `null`).
+- **`id` for dedup.** If your `map` doesn't produce an `id`, one is derived deterministically from the
+  source host + item url/title, so overlapping poll windows are safe to dedup client-side.
+- **Volatile:** like `company.news`, results change over time; `data.as_of` is set and the cache/ETag
+  are keyed on the UTC date too. Not reproducible across days.
+- **Provenance:** `sources[]` carries the resolved host (with your optional `license` →
+  `attribution`). No source content is stored; the engine is a pass-through.
+- **Security (caller-controlled URL).** The URL is fetched server-side, so it is SSRF-guarded:
+  **https-only** and **private/loopback/link-local/cloud-metadata targets are blocked** by default,
+  redirects are **not** followed, and the response is size-capped. A deployment may pin fetching to an
+  allowlist of hosts (`DYNAMIC_SOURCE_ALLOWLIST`) or disable the source entirely
+  (`DISABLED_CONNECTORS=http_source` → `501 source_disabled`). A blocked URL or malformed `source`
+  spec is a **422** (client error), not a 502. Your `source.headers` are never logged or echoed back.
+
 ### `compose.slide_outline` — composite (overview + examples + papers)
 Params: one of `topic` | `term` | `query`. Orchestrates sub-intents; partial sub-failures appear in
 `warnings` (not `degraded`). `data.slides` is an ordered list of typed slide objects:
@@ -416,4 +484,9 @@ then build requests dynamically (the dev console does exactly this).
   returns `501` there. Self-host to enable it.
 - **Provenance & licensing** — you are responsible for honoring `sources[].license` when you reuse
   retrieved content downstream.
+- **Dynamic source (`feed.poll`)** — fetches a URL *you* supply, so it is SSRF-guarded: https-only,
+  private/internal targets blocked, redirects not followed, response size-capped (knobs:
+  `DYNAMIC_SOURCE_BLOCK_PRIVATE`, `DYNAMIC_SOURCE_ALLOW_HTTP`, `DYNAMIC_SOURCE_ALLOWLIST`,
+  `DYNAMIC_SOURCE_MAX_BYTES`). Lock it to known hosts with an allowlist, or turn it off with
+  `DISABLED_CONNECTORS=http_source`. Credentials you pass in `source.headers` are never logged/echoed.
 - **Versioning** — breaking changes will land under a new prefix (`/v2`); `/v1` shapes above are stable.

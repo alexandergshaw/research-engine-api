@@ -13,6 +13,13 @@ def _int(name: str, default: int) -> int:
     return int(os.getenv(name, default))
 
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _csv_set(name: str) -> frozenset[str]:
     return frozenset(p.strip() for p in os.getenv(name, "").split(",") if p.strip())
 
@@ -77,7 +84,16 @@ class Config:
     USER_AGENT = os.getenv("USER_AGENT", "research-engine-api/0.1 (+you@example.com)")
 
     # Connectors to skip (e.g. bulk-dataset sources unfit for serverless cold starts).
+    # Set DISABLED_CONNECTORS=http_source to turn off the caller-supplied dynamic source.
     DISABLED_CONNECTORS = _csv_set("DISABLED_CONNECTORS")
+
+    # --- Dynamic source (feed.poll) — guards on the caller-supplied URL ---
+    # The URL is caller-controlled, so block private/internal targets by default and
+    # require https. Set an allowlist to lock fetching to known hosts in production.
+    DYNAMIC_SOURCE_BLOCK_PRIVATE = _bool("DYNAMIC_SOURCE_BLOCK_PRIVATE", True)
+    DYNAMIC_SOURCE_ALLOW_HTTP = _bool("DYNAMIC_SOURCE_ALLOW_HTTP", False)
+    DYNAMIC_SOURCE_ALLOWLIST = _csv_set("DYNAMIC_SOURCE_ALLOWLIST")
+    DYNAMIC_SOURCE_MAX_BYTES = _int("DYNAMIC_SOURCE_MAX_BYTES", 2_000_000)
 
     # --- Source credentials (optional) ---
     SOURCE_CREDS = {
@@ -97,3 +113,6 @@ class TestConfig(Config):
     HTTP_TIMEOUT = 2.0
     FANOUT_DEADLINE = 4.0
     HTTP_MAX_RETRIES = 2  # keep retry-backoff sleeps short in tests
+    # Mocked upstreams use example hostnames; skip real DNS for the SSRF guard by
+    # default. The dedicated SSRF test re-enables it with a private-IP target.
+    DYNAMIC_SOURCE_BLOCK_PRIVATE = False

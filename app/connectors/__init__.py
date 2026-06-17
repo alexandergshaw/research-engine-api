@@ -9,6 +9,7 @@ from . import (  # noqa: F401
     esco,
     gdelt,
     github,
+    http_source,
     mitre_attack,
     nvd,
     sec_edgar,
@@ -28,4 +29,5 @@ __all__ = [
     "sec_edgar",
     "esco",
     "gdelt",
+    "http_source",
 ]

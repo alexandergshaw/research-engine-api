@@ -23,6 +23,12 @@ class EngineContext:
     deadline: float = 12.0
     max_connectors: int = 4
     disabled_connectors: frozenset[str] = frozenset()
+    # Caller-supplied dynamic source (feed.poll) — SSRF/abuse limits, resolved in the
+    # request thread so connector worker threads never touch current_app.
+    dynamic_source_allow_http: bool = False
+    dynamic_source_block_private: bool = True
+    dynamic_source_allowlist: frozenset[str] = frozenset()
+    dynamic_source_max_bytes: int = 2_000_000
 
 
 def build_context() -> EngineContext:
@@ -34,4 +40,8 @@ def build_context() -> EngineContext:
         deadline=cfg["FANOUT_DEADLINE"],
         max_connectors=cfg["MAX_CONNECTORS_PER_INTENT"],
         disabled_connectors=frozenset(cfg.get("DISABLED_CONNECTORS", frozenset())),
+        dynamic_source_allow_http=cfg["DYNAMIC_SOURCE_ALLOW_HTTP"],
+        dynamic_source_block_private=cfg["DYNAMIC_SOURCE_BLOCK_PRIVATE"],
+        dynamic_source_allowlist=frozenset(cfg.get("DYNAMIC_SOURCE_ALLOWLIST", frozenset())),
+        dynamic_source_max_bytes=cfg["DYNAMIC_SOURCE_MAX_BYTES"],
     )

@@ -133,16 +133,20 @@ class HttpClient:
         headers: dict[str, str] | None = None,
         json: Any | None = None,
         timeout: float | None = None,
+        follow_redirects: bool | None = None,
     ) -> httpx.Response:
         """Resilient request returning the raw Response (retries + breaker applied).
 
         ``timeout`` overrides the client default for this call (e.g. bulk downloads).
+        ``follow_redirects=False`` keeps a redirect from bouncing past an SSRF check
+        (used by the caller-supplied dynamic source); ``None`` uses the client default.
         """
         breaker = self.breaker(source)
 
         def _guarded() -> httpx.Response:
             return self._with_retry(
-                method, source, url, params=params, headers=headers, json=json, timeout=timeout
+                method, source, url, params=params, headers=headers, json=json,
+                timeout=timeout, follow_redirects=follow_redirects,
             )
 
         try:
@@ -150,19 +154,29 @@ class HttpClient:
         except pybreaker.CircuitBreakerError as exc:
             raise RetryableUpstream(f"{source}: circuit open", source=source) from exc
 
-    def _with_retry(self, method, source, url, *, params, headers, json, timeout) -> httpx.Response:
+    def _with_retry(
+        self, method, source, url, *, params, headers, json, timeout, follow_redirects
+    ) -> httpx.Response:
         retryer = Retrying(
             reraise=True,
             stop=stop_after_attempt(self._max_retries),
             wait=wait_exponential_jitter(initial=0.3, max=4.0),
             retry=retry_if_exception_type((httpx.TransportError, RetryableUpstream)),
         )
-        return retryer(self._send_once, method, source, url, params, headers, json, timeout)
+        return retryer(
+            self._send_once, method, source, url, params, headers, json, timeout, follow_redirects
+        )
 
-    def _send_once(self, method, source, url, params, headers, json, timeout) -> httpx.Response:
+    def _send_once(
+        self, method, source, url, params, headers, json, timeout, follow_redirects
+    ) -> httpx.Response:
         timeout_arg = httpx.USE_CLIENT_DEFAULT if timeout is None else timeout
+        redirects_arg = (
+            httpx.USE_CLIENT_DEFAULT if follow_redirects is None else follow_redirects
+        )
         resp = self._client.request(
-            method, url, params=params, headers=headers, json=json, timeout=timeout_arg
+            method, url, params=params, headers=headers, json=json,
+            timeout=timeout_arg, follow_redirects=redirects_arg,
         )
         status = resp.status_code
         if status in _RETRYABLE_STATUS:
@@ -172,6 +186,8 @@ class HttpClient:
             raise RetryableUpstream(f"{source}: HTTP {status}", source=source, status=status)
         if status == 404:
             raise NotFoundUpstream(f"{source}: not found", source=source, status=404)
+        if resp.is_redirect and follow_redirects is False:
+            return resp  # caller opted out of following — let it inspect/reject the redirect
         resp.raise_for_status()  # other 4xx -> HTTPStatusError (excluded from breaker)
         return resp
 

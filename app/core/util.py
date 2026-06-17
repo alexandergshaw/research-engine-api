@@ -20,6 +20,24 @@ def utc_date() -> str:
     return _dt.datetime.now(_dt.UTC).date().isoformat()
 
 
+def redact_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Params safe to echo in the response/cache: mask caller-supplied auth headers.
+
+    The ``feed.poll`` intent lets callers pass their source's credentials in
+    ``source.headers``; those must never be reflected back in the envelope ``query``
+    or stored in the cached payload. The real params are still used for fetching
+    and for the (hashed) cache key — only the echoed view is masked.
+    """
+    source = params.get("source")
+    if not isinstance(source, dict) or not isinstance(source.get("headers"), dict):
+        return params
+    safe = dict(params)
+    safe_source = dict(source)
+    safe_source["headers"] = {name: "***" for name in source["headers"]}
+    safe["source"] = safe_source
+    return safe
+
+
 def cache_key(intent: str, params: dict[str, Any], bucket: str | None = None) -> str:
     """Stable cache key from an intent + params (+ optional time bucket for volatile intents)."""
     blob = json.dumps(

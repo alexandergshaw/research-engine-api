@@ -84,6 +84,7 @@ Every endpoint except `/v1/health` and `/v1/ready` requires an `X-API-Key` (when
 | GET  | `/v1/companies/{name}/profile` | `company.profile` |
 | GET  | `/v1/roles/{title}/responsibilities` | `role.responsibilities` |
 | GET  | `/v1/compose/slide-outline?topic=` | `compose.slide_outline` (composite) |
+| POST | `/v1/jobs/postings` | `feed.poll` — incremental stream over a **caller-supplied** source |
 
 ### Try it
 
@@ -96,6 +97,14 @@ curl -X POST http://127.0.0.1:5000/v1/research -H "X-API-Key: $KEY" \
 curl -H "X-API-Key: $KEY" http://127.0.0.1:5000/v1/concepts/asyncio/examples
 curl -H "X-API-Key: $KEY" "http://127.0.0.1:5000/v1/security/vulnerabilities?product=openssl"
 curl -H "X-API-Key: $KEY" "http://127.0.0.1:5000/v1/compose/slide-outline?topic=TLS"
+
+# feed.poll — stream from a source YOU describe; poll again with the returned data.cursor
+curl -X POST http://127.0.0.1:5000/v1/jobs/postings -H "X-API-Key: $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"source": {"url": "https://boards.greenhouse.io/embed/job_board?for=example",
+                  "items_path": "jobs",
+                  "map": {"id":"id","title":"title","url":"absolute_url","posted_at":"updated_at"},
+                  "cursor_field": "posted_at", "cursor_type": "datetime"}}'
 ```
 
 ## Response envelope
@@ -112,6 +121,21 @@ curl -H "X-API-Key: $KEY" "http://127.0.0.1:5000/v1/compose/slide-outline?topic=
 }
 ```
 
+## Streaming feeds (`feed.poll`)
+
+`feed.poll` (served at `POST /v1/jobs/postings`) turns the engine into a stateless **incremental
+stream** over a source *you* describe. The calling app supplies the source — `url`, how to find the
+records (`items_path`), and a field `map` — plus which field is the monotonic `cursor_field`. Each
+call returns only records newer than the caller's cursor and a fresh `data.cursor`; poll continuously
+by passing that cursor back as `cursor` (one-shot or forever — you own the cadence). Because the
+cursor lives with the client, the engine needs no database.
+
+The URL is fetched server-side, so it is **SSRF-guarded**: https-only, private/loopback/cloud-metadata
+targets blocked, redirects not followed, response size-capped. Lock fetching to known hosts with
+`DYNAMIC_SOURCE_ALLOWLIST`, or disable the source entirely with `DISABLED_CONNECTORS=http_source`.
+Credentials you pass in `source.headers` are never logged or echoed back. See
+[docs/API_SPEC.md](docs/API_SPEC.md) §8 `feed.poll` for the full source-spec contract.
+
 ## Connectors (sources)
 
 | Domain | Connector | Intents served |
@@ -123,6 +147,7 @@ curl -H "X-API-Key: $KEY" "http://127.0.0.1:5000/v1/compose/slide-outline?topic=
 | Companies | SEC EDGAR (+ Wikidata facts) | `company.profile` |
 | Occupations | ESCO | `role.responsibilities` |
 | News | GDELT | `company.news` (headline + link + metadata, deterministic tone filter) |
+| Any JSON feed | Dynamic source (caller-supplied) | `feed.poll` (incremental stream + cursor; e.g. job postings) |
 
 **Adding a source:** drop an `@register` `Connector` subclass in `app/connectors/`, declare its
 intents, list it in `app/connectors/__init__.py`. The router discovers it automatically.
@@ -135,7 +160,11 @@ Env-driven; everything has a sane default. Full list in [`.env.example`](.env.ex
 |---|---|---|
 | `API_KEYS` | _(empty → open)_ | Comma-separated accepted API keys (`X-API-Key`). |
 | `USER_AGENT` | `research-engine-api/0.1 (+you@example.com)` | **Required** by Wikipedia & SEC. |
-| `DISABLED_CONNECTORS` | _(none)_ | Connectors to skip (e.g. `mitre_attack` on serverless). |
+| `DISABLED_CONNECTORS` | _(none)_ | Connectors to skip (e.g. `mitre_attack` on serverless, `http_source` to turn off `feed.poll`). |
+| `DYNAMIC_SOURCE_BLOCK_PRIVATE` | `true` | `feed.poll`: block private/loopback/metadata fetch targets (SSRF guard). |
+| `DYNAMIC_SOURCE_ALLOW_HTTP` | `false` | `feed.poll`: permit plain `http` source URLs (else https-only). |
+| `DYNAMIC_SOURCE_ALLOWLIST` | _(none)_ | `feed.poll`: csv of host suffixes the source URL must match. |
+| `DYNAMIC_SOURCE_MAX_BYTES` | `2000000` | `feed.poll`: max source response size. |
 | `CORS_ORIGINS` | _(none)_ | Allowed origins for cross-origin dev (csv). Unneeded same-origin. |
 | `RATELIMIT_DEFAULT` | `120/minute` | Per-key in-memory rate limit (best-effort). |
 | `HTTP_TIMEOUT` · `FANOUT_DEADLINE` | `8.0` · `12.0` | Per-request timeout · whole-request budget. |

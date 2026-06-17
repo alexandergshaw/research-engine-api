@@ -15,7 +15,7 @@ from flask_smorest import abort as smorest_abort
 from app.core.engine import EngineError, research_intent
 from app.core.envelope import build_envelope
 from app.core.intents import bucket_for
-from app.core.util import response_etag
+from app.core.util import redact_params, response_etag
 from app.version import RESPONSE_VERSION
 
 
@@ -60,7 +60,7 @@ def serve_safe(intent: str, params: dict[str, Any]) -> dict[str, Any]:
         code = exc.extra.get("code", "error")
         return build_envelope(
             intent=intent,
-            query=params,
+            query=redact_params(params),
             data={},
             sources=[],
             degraded=True,

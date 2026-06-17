@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 _REGISTRY: dict[str, Connector] = {}
 
 
+class ConnectorBadRequest(Exception):
+    """The request is invalid/forbidden for this connector (client error, not a flake).
+
+    Distinct from an upstream failure: the engine maps it to a 422 rather than a 502,
+    since retrying or serving stale data won't help (e.g. a malformed source spec or a
+    URL blocked by the SSRF guard).
+    """
+
+
 @dataclass
 class Source:
     """Provenance for a piece of returned data."""

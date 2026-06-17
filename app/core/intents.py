@@ -71,6 +71,15 @@ def company_news_normalizer(results: list[ConnectorResult]) -> dict[str, Any]:
     return data
 
 
+def feed_poll_normalizer(results: list[ConnectorResult]) -> dict[str, Any]:
+    """Preserve the full feed shape — keep `postings`/`cursor` even when empty."""
+    data: dict[str, Any] = {}
+    for result in reversed(results):  # best-ranked wins on conflict
+        data.update(result.data)
+    data.setdefault("postings", [])
+    return data
+
+
 def register_intent(spec: IntentSpec) -> IntentSpec:
     _INTENTS[spec.name] = spec
     return spec
@@ -186,6 +195,19 @@ register_intent(
         optional=["limit", "since_days", "min_tone", "sort"],
         returns=["company", "as_of", "articles"],
         normalizer=company_news_normalizer,
+        volatile=True,
+    )
+)
+register_intent(
+    IntentSpec(
+        "feed.poll",
+        "Incremental stream of items from a caller-supplied HTTP JSON source "
+        "(e.g. job postings). Returns only items newer than the caller's cursor; the "
+        "caller owns the poll cadence (one-shot or continuous). Time-varying.",
+        accepts=["source"],
+        optional=["since", "cursor", "limit"],
+        returns=["source", "as_of", "postings", "cursor", "count", "has_more"],
+        normalizer=feed_poll_normalizer,
         volatile=True,
     )
 )

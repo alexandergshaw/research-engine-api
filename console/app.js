@@ -165,7 +165,13 @@ const FIELD_HINTS = {
   language: "tag, e.g. python",
   tag: "tag, e.g. asyncio",
   limit: "max results, e.g. 5",
+  source: '{"url":"https://…","items_path":"jobs","map":{"id":"id","title":"title","url":"url","posted_at":"updated_at"},"cursor_field":"posted_at","cursor_type":"datetime"}',
+  since: "high-water value, e.g. 2026-06-17T08:00:00Z",
+  cursor: "opaque cursor from a prior poll",
 };
+
+// Fields whose value is JSON (object/array), not a plain string.
+const JSON_FIELDS = new Set(["source"]);
 
 function selectIntent(spec, values) {
   $("intent").value = spec.name;
@@ -181,11 +187,15 @@ function selectIntent(spec, values) {
       ? ' <span class="text-rose-400">*</span>'
       : ' <span class="text-slate-600">(optional)</span>';
     wrap.innerHTML = `${f}${req}`;
-    const input = document.createElement("input");
+    const isJson = JSON_FIELDS.has(f);
+    const input = document.createElement(isJson ? "textarea" : "input");
     input.className = "mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm";
+    if (isJson) { input.rows = 6; input.classList.add("font-mono"); }
     input.dataset.field = f;
     input.placeholder = FIELD_HINTS[f] || `e.g. a value for ${f}`;
-    if (values && values[f] != null) input.value = values[f];
+    if (values && values[f] != null) {
+      input.value = typeof values[f] === "object" ? JSON.stringify(values[f], null, 2) : values[f];
+    }
     wrap.appendChild(input);
     box.appendChild(wrap);
   }
@@ -196,9 +206,14 @@ function runAdvanced() {
   const intent = $("intent").value.trim();
   if (!intent) return;
   const params = {};
-  for (const inp of document.querySelectorAll("#params input")) {
+  for (const inp of document.querySelectorAll("#params input, #params textarea")) {
     const v = inp.value.trim();
-    if (v) params[inp.dataset.field] = v;
+    if (!v) continue;
+    const f = inp.dataset.field;
+    if (JSON_FIELDS.has(f) || v[0] === "{" || v[0] === "[") {
+      try { params[f] = JSON.parse(v); continue; } catch { /* fall through as string */ }
+    }
+    params[f] = v;
   }
   execute(intent, params);
 }

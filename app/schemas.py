@@ -110,6 +110,58 @@ class CompanyNewsDataSchema(Schema):
     articles = fields.List(fields.Nested(CompanyNewsArticleSchema))
 
 
+class SourceSpecSchema(Schema):
+    """A caller-supplied HTTP JSON source: where to fetch and how to read it."""
+
+    url = fields.Str(required=True, metadata={"description": "source endpoint (https)"})
+    method = fields.Str(load_default="GET", metadata={"description": "GET (default) or POST"})
+    query = fields.Dict(metadata={"description": "querystring params"})
+    headers = fields.Dict(metadata={"description": "request headers, e.g. auth (masked in echo)"})
+    body = fields.Raw(metadata={"description": "JSON body (POST only)"})
+    items_path = fields.Str(metadata={"description": "dotted path to the records array"})
+    map = fields.Dict(metadata={"description": "target field -> dotted source path"})
+    cursor_field = fields.Str(metadata={"description": "mapped field used as the high-water mark"})
+    cursor_type = fields.Str(
+        metadata={"description": "ordering of cursor_field: datetime | epoch | number | string"}
+    )
+    license = fields.Str(metadata={"description": "optional license/attribution for the source"})
+
+
+class FeedPollArgs(Schema):
+    """Request body for POST /v1/jobs/postings (the feed.poll intent)."""
+
+    source = fields.Nested(SourceSpecSchema, required=True)
+    since = fields.Raw(allow_none=True, metadata={"description": "raw high-water value"})
+    cursor = fields.Str(metadata={"description": "opaque cursor from a prior poll's data.cursor"})
+    limit = fields.Int(load_default=50, metadata={"description": "max items this poll (1-200)"})
+
+
+class FeedItemSchema(Schema):
+    """Representative projected item (the actual keys follow the caller's `map`)."""
+
+    id = fields.Str(metadata={"description": "stable id for client-side dedup"})
+    title = fields.Str()
+    company = fields.Str()
+    location = fields.Str()
+    url = fields.Str()
+    posted_at = fields.Str()
+    tags = fields.Raw()
+
+
+class FeedPollDataSchema(Schema):
+    """`data` shape for the feed.poll intent (e.g. job postings)."""
+
+    source = fields.Str(metadata={"description": "resolved source host"})
+    as_of = fields.Str(metadata={"description": "UTC date the poll ran"})
+    postings = fields.List(fields.Nested(FeedItemSchema))
+    cursor = fields.Str(
+        allow_none=True,
+        metadata={"description": "opaque high-water cursor; pass back to poll for more"},
+    )
+    count = fields.Int()
+    has_more = fields.Bool(metadata={"description": "upstream had more than `limit` new items"})
+
+
 class HealthSchema(Schema):
     status = fields.Str()
     version = fields.Str()
