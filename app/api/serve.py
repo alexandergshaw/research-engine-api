@@ -14,6 +14,7 @@ from flask_smorest import abort as smorest_abort
 
 from app.core.engine import EngineError, research_intent
 from app.core.envelope import build_envelope
+from app.core.intents import bucket_for
 from app.core.util import response_etag
 from app.version import RESPONSE_VERSION
 
@@ -39,7 +40,7 @@ def serve(intent: str, params: dict[str, Any]) -> dict[str, Any]:
     except EngineError as exc:
         _abort_engine(exc)
 
-    etag = response_etag(intent, params, RESPONSE_VERSION)
+    etag = response_etag(intent, params, RESPONSE_VERSION, bucket_for(intent))
     max_age = current_app.config["CACHE_DEFAULT_TIMEOUT"]
 
     @after_this_request

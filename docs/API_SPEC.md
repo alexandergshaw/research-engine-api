@@ -301,6 +301,35 @@ Params: one of `query` | `term` | `topic`. Optional: `limit` (≤20, def 5).
 }
 ```
 
+### `company.news` — sources: gdelt  ·  **time-varying (not reproducible)**
+Params: one of `name` | `ticker` | `query` | `term`. Optional: `limit` (1–25, def 10),
+`since_days` (1–365, def 90), `min_tone` (float, def 0.0 — keep articles at/above this tone),
+`sort` (`tone` default | `recency`). **Headline + link + metadata only — never body text.**
+```jsonc
+"data": {
+  "company": "Acme",                  // echoed identifier
+  "as_of": "2026-06-16",              // UTC date the query ran
+  "articles": [
+    { "title": "Acme wins record profit", "source": "reuters.com",
+      "url": "https://reuters.com/…", "published": "2026-06-14T12:00:00Z",
+      "tone": 4.0, "language": "en" }
+  ]
+}
+```
+Notes:
+- **`tone` is deterministic** — computed from the headline via a small bundled lexicon (no LLM).
+  It is the ranking key and the value you filter on with `min_tone`; "positive" is the caller's
+  threshold, not an editorial judgement. Default sort is `tone` desc (recency tiebreak).
+- **Volatile:** unlike other intents, results change over time. The response carries `data.as_of`,
+  and the cache/ETag are keyed on the **UTC date** in addition to intent+params+version — so within
+  a day the ETag is stable and repeats hit the cache, but it rotates daily. Do not treat results as
+  reproducible across days.
+- Empty result is a normal `200`: `data.articles: []` with `warnings: ["no news found for query"]`.
+- Provenance: `sources[]` includes **GDELT** plus each **publisher domain**, each with an
+  `attribution` string; `attribution_required` is `true`.
+- If `gdelt` is disabled in the deployment, `company.news` returns the structured `501`
+  `source_disabled` with `disabled_sources: ["gdelt"]` (see §5).
+
 ### `compose.slide_outline` — composite (overview + examples + papers)
 Params: one of `topic` | `term` | `query`. Orchestrates sub-intents; partial sub-failures appear in
 `warnings` (not `degraded`). `data.slides` is an ordered list of typed slide objects:

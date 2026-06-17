@@ -77,7 +77,9 @@ class Intents(MethodView):
                 "description": spec.description,
                 "accepts": spec.accepts,
                 "optional": spec.optional,
+                "returns": spec.returns,
                 "composite": spec.composite,
+                "volatile": spec.volatile,
                 "sources": candidates_for(spec.name),
             }
             for spec in all_intents()

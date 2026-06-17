@@ -26,3 +26,9 @@ def register_blueprints(api: Api) -> None:
         slides_blp,
     ):
         api.register_blueprint(blp)
+
+    # Document intent-specific data shapes that aren't tied to a single endpoint
+    # (they're served via the generic /v1/research) so they appear in /openapi.json.
+    from app.schemas import CompanyNewsDataSchema
+
+    api.spec.components.schema("CompanyNewsData", schema=CompanyNewsDataSchema)

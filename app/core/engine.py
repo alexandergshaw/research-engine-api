@@ -19,7 +19,7 @@ from .cache import get_fresh, get_stale, store
 from .context import build_context
 from .envelope import build_envelope
 from .http import NotFoundUpstream
-from .intents import get_intent, is_known, validate_params
+from .intents import bucket_for, get_intent, is_known, validate_params
 from .router import candidates_for, route
 from .util import cache_key
 
@@ -58,7 +58,7 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
     if errors:
         raise InvalidParams("; ".join(errors), errors=errors)
 
-    key = cache_key(intent, params)
+    key = cache_key(intent, params, bucket_for(intent))
 
     fresh = get_fresh(key)
     if fresh is not None:
@@ -115,6 +115,7 @@ def research_intent(intent: str, params: dict[str, Any]) -> dict[str, Any]:
 
     data, sources = aggregate(intent, results)
     warnings = [f"source '{name}' failed: {msg}" for name, msg in failures]
+    warnings += [w for r in results for w in r.warnings]
     envelope = build_envelope(
         intent=intent,
         query=params,

@@ -44,6 +44,7 @@ class ConnectorResult:
     data: dict[str, Any]
     sources: list[Source] = field(default_factory=list)
     relevance: float = 1.0
+    warnings: list[str] = field(default_factory=list)  # surfaced in the envelope's warnings
 
 
 class Connector(ABC):

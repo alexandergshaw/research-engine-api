@@ -122,6 +122,7 @@ curl -H "X-API-Key: $KEY" "http://127.0.0.1:5000/v1/compose/slide-outline?topic=
 | Academic / STEM | arXiv | `academic.papers` |
 | Companies | SEC EDGAR (+ Wikidata facts) | `company.profile` |
 | Occupations | ESCO | `role.responsibilities` |
+| News | GDELT | `company.news` (headline + link + metadata, deterministic tone filter) |
 
 **Adding a source:** drop an `@register` `Connector` subclass in `app/connectors/`, declare its
 intents, list it in `app/connectors/__init__.py`. The router discovers it automatically.

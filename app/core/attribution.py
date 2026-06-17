@@ -17,11 +17,16 @@ _DISPLAY = {
     "arxiv": "arXiv",
     "sec_edgar": "SEC EDGAR",
     "esco": "ESCO",
+    "gdelt": "GDELT",
 }
 
 
 def display_name(name: str) -> str:
-    return _DISPLAY.get(name, name.replace("_", " ").title())
+    if name in _DISPLAY:
+        return _DISPLAY[name]
+    if "." in name:  # a publisher domain (e.g. reuters.com) — show verbatim
+        return name
+    return name.replace("_", " ").title()
 
 
 def requires_attribution(license_: str | None) -> bool:

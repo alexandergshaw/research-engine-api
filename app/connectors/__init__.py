@@ -7,6 +7,7 @@ import it below. The router discovers it automatically.
 from . import (  # noqa: F401
     arxiv,
     esco,
+    gdelt,
     github,
     mitre_attack,
     nvd,
@@ -26,4 +27,5 @@ __all__ = [
     "arxiv",
     "sec_edgar",
     "esco",
+    "gdelt",
 ]

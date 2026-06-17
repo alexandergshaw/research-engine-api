@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.connectors.base import ConnectorResult, known_intents
+from app.core.util import utc_date
 
 Normalizer = Callable[[list[ConnectorResult]], dict[str, Any]]
 
@@ -22,9 +23,11 @@ class IntentSpec:
     description: str
     accepts: list[str] = field(default_factory=list)  # identifier params, one required
     optional: list[str] = field(default_factory=list)
+    returns: list[str] = field(default_factory=list)  # top-level data keys (discovery)
     normalizer: Normalizer | None = None
     composite: bool = False
     subintents: list[str] = field(default_factory=list)
+    volatile: bool = False  # time-varying — cache/ETag rotate per UTC day
 
 
 _INTENTS: dict[str, IntentSpec] = {}
@@ -59,6 +62,15 @@ def company_profile_normalizer(results: list[ConnectorResult]) -> dict[str, Any]
     return data
 
 
+def company_news_normalizer(results: list[ConnectorResult]) -> dict[str, Any]:
+    """Preserve the full news shape — keep `articles` even when empty (no-news case)."""
+    data: dict[str, Any] = {}
+    for result in reversed(results):  # best-ranked wins on conflict
+        data.update(result.data)
+    data.setdefault("articles", [])
+    return data
+
+
 def register_intent(spec: IntentSpec) -> IntentSpec:
     _INTENTS[spec.name] = spec
     return spec
@@ -79,6 +91,12 @@ def normalizer_for(name: str) -> Normalizer | None:
 
 def is_known(name: str) -> bool:
     return name in _INTENTS or name in known_intents()
+
+
+def bucket_for(name: str) -> str | None:
+    """Time bucket folded into cache key/ETag for volatile intents (else None)."""
+    spec = _INTENTS.get(name)
+    return utc_date() if (spec and spec.volatile) else None
 
 
 def validate_params(name: str, params: dict[str, Any]) -> list[str]:
@@ -157,6 +175,18 @@ register_intent(
         "Academic papers (title, abstract, authors) matching a query.",
         accepts=["query", "term", "topic"],
         optional=["limit"],
+    )
+)
+register_intent(
+    IntentSpec(
+        "company.news",
+        "Recent news articles about an organization, with a deterministic tone filter "
+        "(headline + link + metadata only; time-varying).",
+        accepts=["name", "ticker", "query", "term"],
+        optional=["limit", "since_days", "min_tone", "sort"],
+        returns=["company", "as_of", "articles"],
+        normalizer=company_news_normalizer,
+        volatile=True,
     )
 )
 register_intent(

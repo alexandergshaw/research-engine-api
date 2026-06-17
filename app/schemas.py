@@ -87,8 +87,27 @@ class IntentSpecSchema(Schema):
     description = fields.Str()
     accepts = fields.List(fields.Str())
     optional = fields.List(fields.Str())
+    returns = fields.List(fields.Str(), metadata={"description": "top-level data keys"})
     composite = fields.Bool()
+    volatile = fields.Bool(metadata={"description": "time-varying; not reproducible across time"})
     sources = fields.List(fields.Str())
+
+
+class CompanyNewsArticleSchema(Schema):
+    title = fields.Str()
+    source = fields.Str(metadata={"description": "publisher / domain"})
+    url = fields.Str()
+    published = fields.Str(allow_none=True)
+    tone = fields.Float(metadata={"description": "deterministic headline tone (ranking key)"})
+    language = fields.Str()
+
+
+class CompanyNewsDataSchema(Schema):
+    """`data` shape for the company.news intent (headline + link + metadata only)."""
+
+    company = fields.Str()
+    as_of = fields.Str(metadata={"description": "UTC date the query ran"})
+    articles = fields.List(fields.Nested(CompanyNewsArticleSchema))
 
 
 class HealthSchema(Schema):
