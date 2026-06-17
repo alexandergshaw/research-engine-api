@@ -1,4 +1,17 @@
 /* Minimal extras on top of Tailwind (loaded via CDN). */
+html {
+  -webkit-text-size-adjust: 100%; /* don't let mobile Safari rescale text */
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+summary {
+  touch-action: manipulation; /* remove the 300ms tap delay */
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -10,7 +23,23 @@
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 pre {
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-word; /* JSON wraps instead of forcing horizontal scroll on phones */
+}
+
+/* Never let a long URL / token blow out the layout on small screens. */
+a,
+code {
+  overflow-wrap: anywhere;
+}
+
+/* Prevent iOS zoom-on-focus: inputs need a >=16px font on small screens. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }

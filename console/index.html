@@ -2,42 +2,43 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#020617" />
     <title>Research Engine — Dev Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
-    <header class="border-b border-slate-800 bg-slate-900/60 sticky top-0 z-10 backdrop-blur">
-      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <h1 class="text-base font-semibold">Research Engine</h1>
-          <span id="status" class="text-xs text-slate-400">idle</span>
+    <header class="border-b border-slate-800 bg-slate-900/70 sticky top-0 z-10 backdrop-blur">
+      <div class="max-w-4xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3">
+        <div class="flex items-baseline gap-2 min-w-0">
+          <h1 class="text-sm sm:text-base font-semibold whitespace-nowrap">Research Engine</h1>
+          <span id="status" class="text-xs text-slate-400 truncate">idle</span>
         </div>
-        <details class="text-xs">
-          <summary class="cursor-pointer text-slate-400 hover:text-slate-200 select-none">⚙ Settings</summary>
-          <div class="absolute right-4 mt-2 w-72 rounded-lg border border-slate-800 bg-slate-900 p-3 space-y-2 shadow-xl">
+        <details class="text-xs shrink-0">
+          <summary class="cursor-pointer text-slate-300 hover:text-white select-none py-1.5 px-1">⚙ Settings</summary>
+          <div class="absolute right-2 sm:right-4 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-800 bg-slate-900 p-3 space-y-2 shadow-xl z-20">
             <label class="block text-slate-400">
               API key
-              <input id="apiKey" type="password" placeholder="X-API-Key (if required)" class="mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-1" />
+              <input id="apiKey" type="password" autocomplete="off" placeholder="X-API-Key (if required)" class="mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-2" />
             </label>
             <label class="block text-slate-400">
               API base URL <span class="text-slate-600">(blank = same origin)</span>
-              <input id="baseUrl" placeholder="(same origin)" class="mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-1" />
+              <input id="baseUrl" inputmode="url" autocomplete="off" placeholder="(same origin)" class="mt-1 block w-full rounded bg-slate-800 border border-slate-700 px-2 py-2" />
             </label>
-            <button id="testBtn" class="w-full rounded bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 font-medium">Save &amp; test</button>
+            <button id="testBtn" class="w-full rounded bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 px-3 py-2 font-medium">Save &amp; test</button>
           </div>
         </details>
       </div>
     </header>
 
-    <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <main class="max-w-4xl mx-auto px-3 sm:px-4 py-5 sm:py-8 space-y-5 sm:space-y-6">
       <!-- Primary: type a concept and search -->
       <section>
         <div class="flex gap-2">
-          <input id="q" autofocus placeholder="Search any concept — e.g. UMGC, RSA, TLS handshake"
-            class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-4 py-3 text-lg focus:outline-none focus:border-indigo-500" />
-          <button id="searchBtn" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-6 py-3 text-base font-semibold">Search</button>
+          <input id="q" autofocus enterkeyhint="search" placeholder="Search a concept — e.g. UMGC, RSA, TLS"
+            class="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 px-3 sm:px-4 py-3 text-base sm:text-lg focus:outline-none focus:border-indigo-500" />
+          <button id="searchBtn" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 px-4 sm:px-6 py-3 text-base font-semibold whitespace-nowrap">Search</button>
         </div>
         <p class="mt-2 text-xs text-slate-500">Searches <span class="font-mono text-slate-400">concept.overview</span>. Tip: if an acronym returns nothing, try the full name.</p>
       </section>
@@ -46,8 +47,8 @@
 
       <!-- Advanced: pick a specific intent + params -->
       <details class="rounded-lg border border-slate-800">
-        <summary class="cursor-pointer select-none px-4 py-2 text-sm text-slate-400 hover:text-slate-200">Advanced — pick a specific intent</summary>
-        <div class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-5 p-4 border-t border-slate-800">
+        <summary class="cursor-pointer select-none px-3 sm:px-4 py-3 text-sm text-slate-300 hover:text-white">Advanced — pick a specific intent</summary>
+        <div class="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4 sm:gap-5 p-3 sm:p-4 border-t border-slate-800">
           <aside class="space-y-3">
             <div>
               <h2 class="text-xs uppercase tracking-wide text-slate-400 mb-2">Quick picks</h2>
@@ -55,16 +56,15 @@
             </div>
             <div>
               <h2 class="text-xs uppercase tracking-wide text-slate-400 mb-2">Intents</h2>
-              <div id="intents" class="space-y-1 text-sm">
+              <div id="intents" class="space-y-1 text-sm max-h-72 lg:max-h-none overflow-y-auto">
                 <p class="text-slate-500 text-xs">Connect (Settings) to load intents.</p>
               </div>
             </div>
           </aside>
           <div>
             <div class="flex items-center gap-2 mb-3">
-              <label class="text-xs text-slate-400">Intent</label>
-              <input id="intent" class="flex-1 rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm font-mono" placeholder="concept.overview" />
-              <button id="runBtn" class="rounded bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 text-sm font-semibold">Run</button>
+              <input id="intent" class="flex-1 min-w-0 rounded bg-slate-800 border border-slate-700 px-2 py-2 text-sm font-mono" placeholder="intent, e.g. concept.overview" />
+              <button id="runBtn" class="rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 px-4 py-2 text-sm font-semibold whitespace-nowrap">Run</button>
             </div>
             <p id="intentDesc" class="text-xs text-slate-400 mb-3"></p>
             <div id="params" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
