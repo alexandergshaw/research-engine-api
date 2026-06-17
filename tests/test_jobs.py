@@ -169,6 +169,16 @@ def test_ssrf_blocks_cloud_metadata():
     assert resp.status_code == 422
 
 
+def test_ssrf_blocks_ipv4_mapped_loopback():
+    resp = _ssrf_post("https://[::ffff:127.0.0.1]/jobs")  # IPv4-mapped IPv6 bypass attempt
+    assert resp.status_code == 422
+
+
+def test_ssrf_blocks_ipv4_mapped_metadata():
+    resp = _ssrf_post("https://[::ffff:169.254.169.254]/latest/meta-data/")
+    assert resp.status_code == 422
+
+
 def test_ssrf_blocks_plain_http_by_default():
     resp = _ssrf_post("http://jobs.example.com/api")  # https required unless allowed
     assert resp.status_code == 422

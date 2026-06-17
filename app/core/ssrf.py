@@ -28,7 +28,7 @@ def _host_allowed(host: str, allowlist: frozenset[str]) -> bool:
     return False
 
 
-def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+def _blocked_flags(ip: ipaddress._BaseAddress) -> bool:
     return (
         ip.is_private
         or ip.is_loopback
@@ -37,6 +37,28 @@ def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
         or ip.is_multicast
         or ip.is_unspecified
     )
+
+
+def _embedded_ipv4(ip: ipaddress._BaseAddress) -> ipaddress.IPv4Address | None:
+    """An IPv4 address tunnelled inside an IPv6 one (mapped / 6to4 / Teredo client)."""
+    if not isinstance(ip, ipaddress.IPv6Address):
+        return None
+    if ip.ipv4_mapped is not None:  # e.g. ::ffff:169.254.169.254
+        return ip.ipv4_mapped
+    if ip.sixtofour is not None:
+        return ip.sixtofour
+    if ip.teredo is not None:
+        return ip.teredo[1]  # the client IPv4 can be an internal address
+    return None
+
+
+def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    # Check the address itself AND any IPv4 it tunnels — an IPv4-mapped/6to4 literal
+    # otherwise dodges the v4 private/link-local flags depending on the stdlib version.
+    if _blocked_flags(ip):
+        return True
+    embedded = _embedded_ipv4(ip)
+    return embedded is not None and _blocked_flags(embedded)
 
 
 def _resolve_ips(host: str) -> list[ipaddress._BaseAddress]:
@@ -81,6 +103,9 @@ def validate_url(
     if allowlist and not _host_allowed(host, allowlist):
         raise SsrfError(f"host '{host}' is not in the allowlist")
     if block_private:
+        # NB: this is a resolve-time check; a hostname could in theory rebind to an
+        # internal IP between here and the actual fetch (DNS rebinding). For a hostile
+        # caller that matters — pin to an allowlist (DYNAMIC_SOURCE_ALLOWLIST) for those.
         for ip in _resolve_ips(host):
             if _is_blocked_ip(ip):
                 raise SsrfError(f"host '{host}' resolves to a blocked address ({ip})")
